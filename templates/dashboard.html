@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CampusVoice AI - Admin Dashboard</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">🎓 CampusVoice <span>AI</span></div>
+  <a href="/" class="nav-link">← Submit a Complaint</a>
+</div>
+
+<div class="container dashboard">
+  <div class="stats-row" id="statsRow"></div>
+
+  <div class="card">
+    <div class="filters">
+      <label>Status:
+        <select id="statusFilter">
+          <option>All</option>
+          <option>Submitted</option>
+          <option>Acknowledged</option>
+          <option>In Progress</option>
+          <option>Resolved</option>
+        </select>
+      </label>
+      <label>Category:
+        <select id="categoryFilter">
+          <option>All</option>
+          <option>Hostel</option>
+          <option>Mess/Food</option>
+          <option>Academics</option>
+          <option>Harassment/Ragging</option>
+          <option>IT/Infrastructure</option>
+          <option>Library</option>
+          <option>Transport</option>
+          <option>Finance/Fees</option>
+          <option>General/Uncategorized</option>
+        </select>
+      </label>
+      <button id="refreshBtn">Refresh</button>
+    </div>
+
+    <table id="complaintsTable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Student</th>
+          <th>Description</th>
+          <th>Category</th>
+          <th>Urgency</th>
+          <th>Sentiment</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="complaintsBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const STATUS_FLOW = ["Submitted", "Acknowledged", "In Progress", "Resolved"];
+
+async function loadStats() {
+  const res = await fetch('/api/stats');
+  const s = await res.json();
+  const critHtml = s.critical_open > 0
+    ? `<div class="stat-box stat-critical"><div class="stat-num">${s.critical_open}</div><div class="stat-label">🚨 Critical &amp; Open</div></div>`
+    : `<div class="stat-box"><div class="stat-num">0</div><div class="stat-label">Critical &amp; Open</div></div>`;
+
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat-box"><div class="stat-num">${s.total}</div><div class="stat-label">Total Complaints</div></div>
+    ${critHtml}
+    ${s.by_status.map(r => `<div class="stat-box"><div class="stat-num">${r.c}</div><div class="stat-label">${r.status}</div></div>`).join('')}
+  `;
+}
+
+async function loadComplaints() {
+  const status = document.getElementById('statusFilter').value;
+  const category = document.getElementById('categoryFilter').value;
+  const res = await fetch(`/api/complaints?status=${encodeURIComponent(status)}&category=${encodeURIComponent(category)}`);
+  const complaints = await res.json();
+
+  const tbody = document.getElementById('complaintsBody');
+  if (complaints.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty">No complaints found.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = complaints.map(c => {
+    const urgencyClass = 'badge-' + (c.urgency_label || 'low').toLowerCase();
+    const dup = c.is_duplicate ? ` <span class="dup-tag">dup of #${c.duplicate_of_id}</span>` : '';
+    const nextStatuses = STATUS_FLOW.filter(s => s !== c.status);
+    return `
+      <tr>
+        <td>#${c.id}</td>
+        <td>${c.anonymous ? '🕶️ Anonymous' : escapeHtml(c.student_name)}</td>
+        <td class="desc-cell">${escapeHtml(c.description)}${dup}</td>
+        <td>${c.category}</td>
+        <td><span class="badge ${urgencyClass}">${c.urgency_label}</span></td>
+        <td>${c.sentiment}</td>
+        <td><span class="status-pill status-${c.status.replace(/\s/g,'')}">${c.status}</span></td>
+        <td>
+          <select class="status-select" data-id="${c.id}">
+            <option value="">Change status...</option>
+            ${nextStatuses.map(s => `<option value="${s}">${s}</option>`).join('')}
+          </select>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  document.querySelectorAll('.status-select').forEach(sel => {
+    sel.addEventListener('change', async (e) => {
+      const id = e.target.dataset.id;
+      const newStatus = e.target.value;
+      if (!newStatus) return;
+      await fetch(`/api/complaint/${id}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      loadComplaints();
+      loadStats();
+    });
+  });
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str || '';
+  return div.innerHTML;
+}
+
+document.getElementById('refreshBtn').addEventListener('click', () => { loadComplaints(); loadStats(); });
+document.getElementById('statusFilter').addEventListener('change', loadComplaints);
+document.getElementById('categoryFilter').addEventListener('change', loadComplaints);
+
+loadStats();
+loadComplaints();
+setInterval(() => { loadStats(); loadComplaints(); }, 15000);
+</script>
+</body>
+</html>

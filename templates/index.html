@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CampusVoice AI - Submit a Complaint</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">🎓 CampusVoice <span>AI</span></div>
+  <a href="/dashboard" class="nav-link">Admin Dashboard →</a>
+</div>
+
+<div class="container">
+  <div class="card form-card">
+    <h1>Submit a Complaint</h1>
+    <p class="subtitle">Our AI engine will automatically categorize, prioritize, and route your complaint.</p>
+
+    <form id="complaintForm">
+      <label>Your Name</label>
+      <input type="text" name="student_name" id="student_name" placeholder="e.g. Priya Sharma">
+
+      <label class="checkbox-label">
+        <input type="checkbox" name="anonymous" id="anonymous">
+        Submit anonymously (recommended for sensitive issues)
+      </label>
+
+      <label>Describe your complaint</label>
+      <textarea name="description" id="description" rows="6"
+        placeholder="e.g. There has been no water supply in Block C hostel for the last 3 days. We have complained to the warden but nothing has been done."
+        required></textarea>
+
+      <button type="submit" id="submitBtn">Submit Complaint</button>
+    </form>
+
+    <div id="result" class="result-box hidden"></div>
+  </div>
+
+  <div class="card info-card">
+    <h2>How it works</h2>
+    <ol>
+      <li><strong>Describe</strong> your issue in your own words — no need to pick a category.</li>
+      <li><strong>AI analyzes</strong> it instantly: category, urgency, and sentiment.</li>
+      <li><strong>Safety-critical</strong> issues (harassment, ragging, injury) are flagged as Critical and escalated immediately.</li>
+      <li><strong>Duplicate detection</strong> merges repeated complaints so common issues get fixed faster.</li>
+      <li><strong>Track</strong> your complaint's status: Submitted → Acknowledged → In Progress → Resolved.</li>
+    </ol>
+    <div class="badge-row">
+      <span class="badge badge-critical">Critical</span>
+      <span class="badge badge-high">High</span>
+      <span class="badge badge-medium">Medium</span>
+      <span class="badge badge-low">Low</span>
+    </div>
+  </div>
+</div>
+
+<script>
+const form = document.getElementById('complaintForm');
+const resultBox = document.getElementById('result');
+const submitBtn = document.getElementById('submitBtn');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Analyzing...';
+
+  const formData = new FormData(form);
+  try {
+    const res = await fetch('/submit', { method: 'POST', body: formData });
+    const data = await res.json();
+
+    if (data.error) {
+      resultBox.innerHTML = `<p class="error">${data.error}</p>`;
+    } else {
+      const a = data.analysis;
+      const urgencyClass = 'badge-' + a.urgency_label.toLowerCase();
+      let html = `
+        <h3>✅ Complaint #${data.complaint_id} submitted</h3>
+        <p><strong>Category:</strong> ${a.category}</p>
+        <p><strong>Urgency:</strong> <span class="badge ${urgencyClass}">${a.urgency_label}</span> (score ${a.urgency_score}/100)</p>
+        <p><strong>Detected sentiment:</strong> ${a.sentiment}</p>
+      `;
+      if (a.is_duplicate) {
+        html += `<p class="note">🔁 This looks similar to complaint #${a.duplicate_of_id} — it has been linked so duplicate issues are tracked together.</p>`;
+      }
+      if (a.self_help_tip) {
+        html += `<p class="tip">💡 <strong>Quick tip while you wait:</strong> ${a.self_help_tip}</p>`;
+      }
+      resultBox.innerHTML = html;
+      form.reset();
+    }
+    resultBox.classList.remove('hidden');
+  } catch (err) {
+    resultBox.innerHTML = `<p class="error">Something went wrong. Please try again.</p>`;
+    resultBox.classList.remove('hidden');
+  }
+  submitBtn.disabled = false;
+  submitBtn.textContent = 'Submit Complaint';
+});
+</script>
+</body>
+</html>
